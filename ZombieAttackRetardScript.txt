@@ -1,0 +1,109 @@
+-- RunService.RenderSteppedmyass
+-- Made by rux
+-- Discord - rux0_0
+
+-- Services
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+
+-- Local Player
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+local backpack = character:WaitForChild("Backpack")
+local mouse = player:GetMouse()
+
+-- Configuration
+local aimRadius = 100 -- Radius to check for zombies
+local renderSteppedInterval = 0.1 -- Time in seconds between checks
+local gun = backpack:FindFirstChildOfClass("Tool") -- Assumes the gun is a Tool
+local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut) -- Adjust as needed
+
+-- State
+local zombiesQueue = {} -- Queue to keep track of zombies
+
+-- Function to get all zombies within range
+local function getZombiesInRange()
+    local zombies = {}
+    for _, object in pairs(Workspace:FindFirstChild("Zombies"):GetChildren()) do
+        if object:IsA("Model") and object:FindFirstChild("Humanoid") then
+            local zombieHead = object:FindFirstChild("Head")
+            if zombieHead and (humanoidRootPart.Position - zombieHead.Position).magnitude < aimRadius then
+                table.insert(zombies, object)
+            end
+        end
+    end
+    return zombies
+end
+
+-- Function to update zombies queue
+local function updateZombiesQueue()
+    zombiesQueue = getZombiesInRange()
+end
+
+-- Function to simulate a mouse click
+local function simulateClick()
+    local input = Instance.new("InputObject")
+    input.UserInputType = Enum.UserInputType.MouseButton1
+    input.Position = mouse.Hit.p
+
+    -- Try to simulate mouse click
+    local success, err = pcall(function()
+        UserInputService.InputBegan:Fire(input)
+    end)
+    if not success then
+        warn("Failed to simulate mouse click: " .. tostring(err))
+    end
+end
+
+-- Function to tween gun around zombies' heads
+local function tweenGunToZombie(zombieHeadPosition)
+    local gunHandle = gun:FindFirstChild("Handle")
+    if gunHandle then
+        local tweenGoal = {Position = zombieHeadPosition}
+        local tween = TweenService:Create(gunHandle, tweenInfo, tweenGoal)
+
+        -- Tween the gun and wait for completion
+        local success, err = pcall(function()
+            tween:Play()
+            tween.Completed:Wait()
+        end)
+        if not success then
+            warn("Failed to tween gun: " .. tostring(err))
+        end
+    end
+end
+
+-- Function to shoot at zombies
+local function shootAtZombies()
+    if #zombiesQueue > 0 then
+        local targetZombie = table.remove(zombiesQueue, 1)
+        local targetHead = targetZombie:FindFirstChild("Head")
+        if targetHead then
+            -- Tween gun to zombie's head
+            tweenGunToZombie(targetHead.Position)
+
+            -- Simulate shooting
+            simulateClick()
+        end
+    end
+end
+
+-- Main execution loop
+RunService.RenderStepped:Connect(function()
+    -- Update zombies queue and manage the timing of aim checks
+    local success, err = xpcall(function()
+        updateZombiesQueue()
+        shootAtZombies()
+    end, function(error)
+        warn("Error during shooting: " .. tostring(error))
+    end)
+    if not success then
+        warn("Failed to execute shooting function: " .. tostring(err))
+    end
+
+    wait(renderSteppedInterval) -- Delay to avoid excessive firing
+end)
